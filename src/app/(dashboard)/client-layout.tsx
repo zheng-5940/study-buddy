@@ -30,6 +30,17 @@ export default function DashboardLayout({
   const router = useRouter()
   const supabase = createClient()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [displayName, setDisplayName] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.user_metadata?.display_name) {
+        setDisplayName(user.user_metadata.display_name)
+      } else if (user?.email) {
+        setDisplayName(user.email.split('@')[0])
+      }
+    })
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -95,7 +106,7 @@ export default function DashboardLayout({
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
-              text-[#8E8E93] hover:bg-[#F5F3EF] hover:text-[#2D3436] w-full transition-all"
+              text-[#8E8E93] hover:bg-[#F5F3EF] hover:text-red-500 w-full transition-all"
           >
             <LogOut size={20} />
             退出登录
@@ -104,14 +115,34 @@ export default function DashboardLayout({
       </aside>
 
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-[#F0EDE8]">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-[#8E8E93] hover:text-[#2D3436]"
-          >
-            <Menu size={24} />
-          </button>
-          <h1 className="text-lg font-bold text-[#2D3436]">📚 Study Buddy</h1>
+        {/* Top header bar - visible on all screen sizes */}
+        <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#F0EDE8]">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden text-[#8E8E93] hover:text-[#2D3436]"
+            >
+              <Menu size={24} />
+            </button>
+            <Link href="/dashboard" className="lg:hidden text-lg font-bold text-[#2D3436]">
+              📚 Study Buddy
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:block text-sm text-[#8E8E93]">
+              {displayName}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm
+                text-[#8E8E93] hover:bg-[#F5F3EF] hover:text-red-500 transition-all"
+              title="退出登录"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">退出</span>
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-8 max-w-5xl w-full mx-auto">
