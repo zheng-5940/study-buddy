@@ -1,7 +1,6 @@
-"use client";
-
-import ClientLayout from "./client-layout";
+'use client';
+import ClientLayout from './client-layout';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-      return <ClientLayout>{children}</ClientLayout>ClientLayout>;
+        return <ClientLayout>{children}</ClientLayout>ClientLayout>;
 }</ClientLayout>
