@@ -1,19 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import type { Profile } from '@/lib/database.types'
-import { User, Clock, Calendar, TrendingUp } from 'lucide-react'
+import { Clock, Calendar, TrendingUp, Camera } from 'lucide-react'
 
 export default function ProfilePage() {
   const supabase = createClient()
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState({ total: 0, days: 0, avg: 0 })
   const [recentSessions, setRecentSessions] = useState<any[]>([])
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState('')
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -23,17 +25,30 @@ export default function ProfilePage() {
   }, [])
 
   async function loadProfile(uid: string) {
-    const { data: prof } = await supabase
+    let { data: prof } = await supabase
       .from('profiles')
       .select()
       .eq('id', uid)
       .single()
+
+    // Auto-create profile if it doesn't exist
+    if (!prof) {
+      const { data: user } = await supabase.auth.getUser()
+      const username = user?.user?.email?.split('@')[0] || 'user_' + uid.substring(0, 8)
+      await supabase.from('profiles').insert({
+        id: uid,
+        username: username,
+        display_name: username,
+      })
+      const { data: newProf } = await supabase.from('profiles').select().eq('id', uid).single()
+      prof = newProf
+    }
+
     if (prof) {
       setProfile(prof)
       setDisplayName(prof.display_name || '')
     }
 
-    // Stats
     const { data: sessions } = await supabase
       .from('study_sessions')
       .select()
@@ -52,6 +67,26 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !profile) return
+
+    setUploading(true)
+    const fileExt = file.name.split('.').pop()
+    const filePath = `${profile.id}/avatar.${fileExt}`
+
+    await supabase.storage.from('avatars').upload(filePath, file, { upsert: true })
+
+    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath)
+    const avatarUrl = urlData?.publicUrl
+
+    if (avatarUrl) {
+      await supabase.from('profiles').update({ avatar_url: avatarUrl }).eq('id', profile.id)
+      setProfile({ ...profile, avatar_url: avatarUrl })
+    }
+    setUploading(false)
+  }
+
   async function saveProfile() {
     if (!profile) return
     await supabase
@@ -68,13 +103,33 @@ export default function ProfilePage() {
     <div className="space-y-6 animate-fade-in">
       <h1 className="text-2xl font-bold text-[#2D3436]">👤 我的</h1>
 
-      {/* Profile card */}
       <div className="bg-white rounded-2xl border border-[#F0EDE8] p-6">
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-full bg-[#7C9A8E]/10 flex items-center justify-center
-            text-[#7C9A8E] text-2xl font-bold">
-            {(profile.display_name || profile.username)[0]}
+          <div className="relative group">
+            <div className="w-16 h-16 rounded-full bg-[#7C9A8E]/10 flex items-center justify-center
+              text-[#7C9A8E] text-2xl font-bold overflow-hidden">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} alt="头像" className="w-full h-full object-cover" />
+              ) : (
+                (profile.display_name || profile.username)[0]
+              )}
+            </div>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute inset-0 rounded-full bg-black/0 hover:bg-black/30
+                flex items-center justify-center transition-all opacity-0 hover:opacity-100"
+            >
+              <Camera size={18} className="text-white" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarUpload}
+            />
           </div>
+
           <div className="flex-1">
             {editing ? (
               <div className="flex gap-2">
@@ -108,9 +163,10 @@ export default function ProfilePage() {
             </button>
           )}
         </div>
+        {uploading && <p className="text-sm text-[#7C9A8E]">上传中...</p>}
+        <p className="text-xs text-[#B8B4AC] mt-1">点击头像上传自定义图片</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border border-[#F0EDE8] p-5 text-center">
           <Clock size={20} className="mx-auto mb-2 text-[#7C9A8E]" />
@@ -129,7 +185,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Recent sessions */}
       <div className="bg-white rounded-2xl border border-[#F0EDE8] p-6">
         <h3 className="font-semibold text-[#2D3436] mb-3">最近学习记录</h3>
         {recentSessions.length === 0 ? (
